@@ -25,10 +25,10 @@ payments as (
         ORDERID as order_id
 
     from {{ source('stripe', 'payment') }}
-    
-)
 
-WITH paid_orders as (
+),
+
+paid_orders as (
 
     select 
         orders.order_id,
