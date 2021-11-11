@@ -11,4 +11,4 @@ sources:
     database: raw
     schema: stripe
     tables:
-      - name: payments
+      - name: payment

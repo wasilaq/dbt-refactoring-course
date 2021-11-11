@@ -19,7 +19,7 @@ WITH paid_orders as (
             max(CREATED) as payment_finalized_date, 
             sum(AMOUNT) / 100.0 as total_amount_paid
 
-        from {{ source('jaffle_shop', 'payments') }}
+        from {{ source('stripe', 'payment') }}
         where STATUS <> 'fail'
         group by 1
 
