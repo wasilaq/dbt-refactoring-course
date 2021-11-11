@@ -13,6 +13,7 @@ with orders as (
 customers as (
 
     select
+        id as customer_id,
         first_name as customer_first_name,
         last_name as customer_last_name
 
@@ -22,7 +23,10 @@ customers as (
 payments as (
 
     select
-        ORDERID as order_id
+        ORDERID as order_id,
+        created,
+        amount,
+        status
 
     from {{ source('stripe', 'payment') }}
 
@@ -46,18 +50,18 @@ paid_orders as (
         
         select 
             order_id, 
-            max(CREATED) as payment_finalized_date, 
-            sum(AMOUNT) / 100.0 as total_amount_paid
+            max(created) as payment_finalized_date, 
+            sum(amount) / 100.0 as total_amount_paid
 
         from payments
-        where STATUS <> 'fail'
+        where status <> 'fail'
         group by 1
 
     ) p 
-        ON orders.ID = p.order_id
+        ON orders.order_id = p.order_id
 
     left join customers
-        on orders.USER_ID = customers.ID ),
+        on orders.customer_id = customers.customer_id ),
 
 customer_orders as (
 
@@ -65,12 +69,12 @@ customer_orders as (
         customers.customer_id
         , min(order_placed_at) as first_order_date
         , max(order_placed_at) as most_recent_order_date
-        , count(orders.id) AS number_of_orders
+        , count(orders.order_id) AS number_of_orders
 
     from customers
 
     left join orders
-        on orders.customer_id = customers.id 
+        on orders.customer_id = customers.customer_id 
 
     group by 1
 
