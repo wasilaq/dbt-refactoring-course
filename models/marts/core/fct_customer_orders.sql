@@ -32,6 +32,19 @@ payments as (
 
 ),
 
+p as (
+
+    select 
+        order_id, 
+        max(created) as payment_finalized_date, 
+        sum(amount) / 100.0 as total_amount_paid
+
+    from payments
+    where status <> 'fail'
+    group by 1
+
+),
+
 paid_orders as (
 
     select 
@@ -44,24 +57,28 @@ paid_orders as (
         customers.customer_first_name,
         customers.customer_last_name
 
-    FROM orders
+    from orders
 
-    left join (
-        
-        select 
-            order_id, 
-            max(created) as payment_finalized_date, 
-            sum(amount) / 100.0 as total_amount_paid
-
-        from payments
-        where status <> 'fail'
-        group by 1
-
-    ) p 
-        ON orders.order_id = p.order_id
+    left join p 
+        on orders.order_id = p.order_id
 
     left join customers
         on orders.customer_id = customers.customer_id ),
+
+x as (
+
+    select
+        paid_orders.order_id,
+        sum(t2.total_amount_paid) as clv_bad
+    from paid_orders
+
+    left join paid_orders t2 
+        on paid_orders.customer_id = t2.customer_id and paid_orders.order_id >= t2.order_id
+
+    group by 1
+    order by paid_orders.order_id
+
+),
 
 customer_orders as (
 
@@ -81,39 +98,26 @@ customer_orders as (
 )
 
 select
-    p.*,
+    paid_orders.*,
 
-    ROW_NUMBER() OVER (ORDER BY p.order_id) as transaction_seq,
+    row_number() over (order by paid_orders.order_id) as transaction_seq,
 
-    ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY p.order_id) as customer_sales_seq,
+    row_number() over (partition by customer_id order by paid_orders.order_id) as customer_sales_seq,
 
-    CASE 
-        WHEN c.first_order_date = p.order_placed_at
-            THEN 'new'
-        ELSE 'return' 
-    END as nvsr,
+    case 
+        when c.first_order_date = paid_orders.order_placed_at
+            then 'new'
+        else 'return' 
+    end as nvsr,
 
     x.clv_bad as customer_lifetime_value,
     c.first_order_date as fdos
 
-FROM paid_orders p
+from paid_orders
 
-left join customer_orders as c USING (customer_id)
+left join customer_orders as c using (customer_id)
 
-LEFT OUTER JOIN 
-(
-    select
-        p.order_id,
-        sum(t2.total_amount_paid) as clv_bad
-    from paid_orders p
+left outer join x
+    on x.order_id = paid_orders.order_id
 
-    left join paid_orders t2 
-        on p.customer_id = t2.customer_id and p.order_id >= t2.order_id
-
-    group by 1
-    order by p.order_id
-
-) x 
-    on x.order_id = p.order_id
-
-ORDER BY order_id
+order by order_id
