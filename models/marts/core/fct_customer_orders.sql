@@ -1,46 +1,76 @@
+with orders as (
+
+    select
+        id as order_id,
+        user_id as customer_id,
+        order_date as order_placed_at,
+        status as order_status
+
+    from {{ source('jaffle_shop', 'orders') }}
+
+),
+
+customers as (
+
+    select
+        first_name as customer_first_name,
+        last_name as customer_last_name
+
+    from {{ source('jaffle_shop', 'customers') }}
+),
+
+payments as (
+
+    select
+        ORDERID as order_id
+
+    from {{ source('stripe', 'payment') }}
+    
+)
+
 WITH paid_orders as (
 
     select 
-        Orders.ID as order_id,
-        Orders.USER_ID	as customer_id,
-        Orders.ORDER_DATE AS order_placed_at,
-        Orders.STATUS AS order_status,
+        orders.order_id,
+        orders.customer_id,
+        orders.order_placed_at,
+        orders.order_status,
         p.total_amount_paid,
         p.payment_finalized_date,
-        C.FIRST_NAME as customer_first_name,
-        C.LAST_NAME as customer_last_name
+        customers.customer_first_name,
+        customers.customer_last_name
 
-    FROM {{ source('jaffle_shop', 'orders') }} as Orders
+    FROM orders
 
     left join (
         
         select 
-            ORDERID as order_id, 
+            order_id, 
             max(CREATED) as payment_finalized_date, 
             sum(AMOUNT) / 100.0 as total_amount_paid
 
-        from {{ source('stripe', 'payment') }}
+        from payments
         where STATUS <> 'fail'
         group by 1
 
     ) p 
         ON orders.ID = p.order_id
 
-    left join {{ source('jaffle_shop', 'customers') }} C 
-        on orders.USER_ID = C.ID ),
+    left join customers
+        on orders.USER_ID = customers.ID ),
 
 customer_orders as (
 
     select 
-        C.ID as customer_id
-        , min(ORDER_DATE) as first_order_date
-        , max(ORDER_DATE) as most_recent_order_date
-        , count(ORDERS.ID) AS number_of_orders
+        customers.customer_id
+        , min(order_placed_at) as first_order_date
+        , max(order_placed_at) as most_recent_order_date
+        , count(orders.id) AS number_of_orders
 
-    from {{ source('jaffle_shop', 'customers') }} C 
+    from customers
 
-    left join {{ source('jaffle_shop', 'orders') }} as Orders
-        on orders.USER_ID = C.ID 
+    left join orders
+        on orders.customer_id = customers.id 
 
     group by 1
 
